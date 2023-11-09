@@ -1,4 +1,4 @@
-import { readonly } from "../reactive";
+import { isReadonly, readonly } from "../reactive";
 
 describe("readonly", () => {
   it("happy path", () => {
@@ -7,6 +7,9 @@ describe("readonly", () => {
 
     expect(wapper).not.toBe(original);
     expect(wapper.foo).toBe(1);
+
+    expect(isReadonly(wapper)).toBe(true);
+    expect(isReadonly(original)).toBe(false);
   });
 
   it("warn when call set", () => {
