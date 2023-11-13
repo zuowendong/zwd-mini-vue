@@ -14,7 +14,7 @@ describe("readonly", () => {
     expect(isReadonly(wapper.bar)).toBe(true);
   });
 
-  it("warn when call set", () => {
+  it("should call console warn when call set", () => {
     console.warn = jest.fn();
     const original = readonly({ foo: 1 });
     original.foo = 2;
