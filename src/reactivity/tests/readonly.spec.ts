@@ -1,4 +1,4 @@
-import { isReadonly, readonly } from "../reactive";
+import { isReadonly, readonly, isProxy } from "../reactive";
 
 describe("readonly", () => {
   it("happy path", () => {
@@ -12,6 +12,8 @@ describe("readonly", () => {
     expect(isReadonly(original)).toBe(false);
 
     expect(isReadonly(wapper.bar)).toBe(true);
+
+    expect(isProxy(wapper)).toBe(true);
   });
 
   it("should call console warn when call set", () => {

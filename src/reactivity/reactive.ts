@@ -23,8 +23,13 @@ export function shallowReadonly(raw) {
 export function isReacive(value) {
   return !!value[ReactiveFlags.IS_REACTIVE];
 }
+
 export function isReadonly(value) {
   return !!value[ReactiveFlags.IS_READONLY];
+}
+
+export function isProxy(value) {
+  return isReacive(value) || isReadonly(value);
 }
 
 function createActiveObject(raw, baseHandler) {
