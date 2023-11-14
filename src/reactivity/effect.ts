@@ -61,18 +61,26 @@ export function track(target, key) {
     depMap.set(key, dep);
   }
 
+  trackEffects(dep);
+}
+
+export function trackEffects(dep) {
   if (dep.has(reactiveEffect)) return;
   dep.add(reactiveEffect);
   reactiveEffect.deps.push(dep);
 }
 
-function isTracking() {
+export function isTracking() {
   return shouldTrack && reactiveEffect !== undefined;
 }
 
 export function trigger(target, key) {
   let depMap = targetMap.get(target);
   let dep = depMap.get(key);
+  triggerEffects(dep);
+}
+
+export function triggerEffects(dep) {
   for (const effect of dep) {
     if (effect.scheduler) {
       effect.scheduler();
