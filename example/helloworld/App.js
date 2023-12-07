@@ -13,6 +13,9 @@ export const App = {
           "p",
           {
             class: "red",
+            onClick: () => {
+              console.log("hello");
+            },
           },
           "hello"
         ),
@@ -20,6 +23,9 @@ export const App = {
           "p",
           {
             class: "blue",
+            onMousedown: () => {
+              console.log(this.msg);
+            },
           },
           "world"
         ),
