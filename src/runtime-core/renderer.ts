@@ -1,6 +1,6 @@
 import { ShapeFlags } from "../shared/shapeFlags";
 import { createComponentInstance, setupComponent } from "./component";
-import { Fragment } from "./vnode";
+import { Fragment, Text } from "./vnode";
 
 export function render(vnode, container) {
   patch(vnode, container);
@@ -12,6 +12,9 @@ function patch(vnode, container) {
   switch (type) {
     case Fragment:
       processFragment(vnode, container);
+      break;
+    case Text:
+      processText(vnode, container);
       break;
 
     default:
@@ -31,6 +34,12 @@ function processFragment(vnode, container) {
 
 function processElement(vnode, container) {
   mountElement(vnode, container);
+}
+
+function processText(vnode, container) {
+  const { children } = vnode;
+  let textNode = (vnode.el = document.createTextNode(children));
+  container.append(textNode);
 }
 
 function mountElement(vnode, container) {
