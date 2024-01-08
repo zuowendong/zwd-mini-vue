@@ -10,29 +10,31 @@ document.body.appendChild(app_PIXI.view);
 
 const renderer = createRenderer({
   createElement(type) {
-    const style = new PIXI.TextStyle({
-      fontFamily: "Arial",
-      fontSize: 36,
-      fontStyle: "italic",
-      fontWeight: "bold",
-      fill: ["#ffffff", "#00ff99"], // gradient
-      stroke: "#4a1850",
-      strokeThickness: 5,
-      dropShadow: true,
-      dropShadowColor: "#000000",
-      dropShadowBlur: 4,
-      dropShadowAngle: Math.PI / 6,
-      dropShadowDistance: 6,
-      wordWrap: true,
-      wordWrapWidth: 440,
-      lineJoin: "round",
-    });
+    if (type === "text") {
+      const style = new PIXI.TextStyle({
+        fontFamily: "Arial",
+        fontSize: 36,
+        fontStyle: "italic",
+        fontWeight: "bold",
+        fill: ["#ffffff", "#00ff99"], // gradient
+        stroke: "#4a1850",
+        strokeThickness: 5,
+        dropShadow: true,
+        dropShadowColor: "#000000",
+        dropShadowBlur: 4,
+        dropShadowAngle: Math.PI / 6,
+        dropShadowDistance: 6,
+        wordWrap: true,
+        wordWrapWidth: 440,
+        lineJoin: "round",
+      });
 
-    const richText = new PIXI.Text(
-      "Rich text with a lot of options and across multiple lines",
-      style
-    );
-    return richText;
+      const richText = new PIXI.Text(
+        "Rich text with a lot of options and across multiple lines",
+        style
+      );
+      return richText;
+    }
   },
 
   patchProp(el, key, value) {
