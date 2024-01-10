@@ -461,10 +461,429 @@ function patchProps(el, oldProps, newProps) {
 
 ![](./static/update-7.gif)
 
+### 优化
+
+加强代码健壮性。在循环老的`props`，如果是空对象的话有没有必要进行循环，因此可以在循环之前添加一个判断，
+
+```ts
+if(oldProps !== {}) {
+  for (const key in oldProps) {
+    if (!(key in newProps)) {
+      hostPatchProp(el, key, oldProps[key], null);
+    }
+  }
+}
+```
+
+但是此时 vscode 都会提示 ts 报错，
+
+> 此条件将始终返回“true”，因为 JavaScript 按引用而不是值比较对象。
+
+因此可以抽离一个空对象作为唯一对比对象，shared 中 index.ts 导出，
+
+```js
+export const EMPTY_OBJ = {};
+```
+
+在 renderer.ts 中引用 `EMPTY_OBJ`
+
+```ts
+function patchElement(n1, n2, container, parentComponent) {
+  const oldProps = n1.props || EMPTY_OBJ;
+  const newProps = n2.props || EMPTY_OBJ;
+  const el = (n2.el = n1.el);
+  patchProps(el, oldProps, newProps);
+}
+
+function patchProps(el, oldProps, newProps) {
+  if (oldProps !== newProps) {
+    for (const key in newProps) {
+      const prevProp = oldProps[key];
+      const nextProp = newProps[key];
+      if (prevProp !== nextProp) {
+        hostPatchProp(el, key, prevProp, nextProp);
+      }
+    }
+    if (oldProps !== EMPTY_OBJ) {
+      for (const key in oldProps) {
+        if (!(key in newProps)) {
+          hostPatchProp(el, key, oldProps[key], null);
+        }
+      }
+    }
+  }
+}
+```
+
 ## 更新children
 
-更新children的情况更复杂，有涉及到diff算法，单独开一篇。
-详见下一篇。
+元素`element`的子节点`children`有两种类型，分别是
+
+1. 文本节点`text_children`，在`ShapeFlags`中设置了`TEXT_CHILDREN = 1 << 2`
+2. 数组类型`array_children`，在`ShapeFlags`中设置了`ARRAY_CHILDREN = 1 << 3`
+
+那子节点的更新，对比情况分为 4 种：
+1. 老的 `children` 为 `array`，新的 `children` 为 `text`
+2. 老的 `children` 为 `text`，新的 `children` 为 `text`
+3. 老的 `children` 为 `text`，新的 `children` 为 `array`
+4. 老的 `children` 为 `array`，新的 `children` 为 `array`
+
+### 老的 Array ->  新的 text
+
+新建测试项目，App.js代码如下：
+
+```js
+import { h } from "../../lib/zwd-mini-vue.esm.js";
+import { ArrayToText } from "./components/ArrayToText.js";
+export const App = {
+  name: "App",
+  setup() {
+    return {};
+  },
+  render() {
+    return h("div", {}, [
+      h("p", {}, "home"),
+      // 老的 Array ->  新的 text
+      h(ArrayToText),
+    ]);
+  },
+};
+```
+
+以上代码中，组件`ArrayToText`用来测试老的 `children` 为 `array`，新的 `children` 为 `text` 这种情况。
+
+ArrayToText.js 代码如下：
+
+```js
+import { h, ref } from "../../../lib/zwd-mini-vue.esm.js";
+
+const prevChildren = [h("p", {}, "A"), h("p", {}, "B")];
+const nextChildren = "newChildren";
+
+export const ArrayToText = {
+  setup() {
+    let hasChange = ref(false);
+    window.hasChange = hasChange;
+    return {
+      hasChange,
+    };
+  },
+  render() {
+    const self = this;
+    return self.hasChange
+      ? h("div", {}, nextChildren)
+      : h("div", {}, prevChildren);
+  },
+};
+```
+
+以上代码中，定义一个布尔值变量`hasChange`显示不同的子节点`children`，将`hasChange`挂载到`window`上便于修改值验证测试结果。
+
+页面效果如下：
+
+![](./static/update-18.png)
+
+预期实现效果是，此时`div`下两个`p`标签，在控制台修改了`hasChange`为`true`时，`div`下变成一个文本节点`newChildren`。
+
+图解示意如下：
+
+![](./static/update-12.png)
+
+#### 实现
+
+在 renderer.ts 中，`patchElement`方法里实现了元素的属性更新`patchProps`，封装一个方法`patchChildren`用来实现`children`的更新。
+
+```ts
+function patchElement(n1, n2, container) {
+  const oldProps = n1.props || EMPTY_OBJ;
+  const newProps = n2.props || EMPTY_OBJ;
+  const el = (n2.el = n1.el);
+
+  patchChildren(n1, n2);
+  patchProps(el, oldProps, newProps);
+}
+```
+
+老的 `children` 为 `array`，新的 `children` 为 `text`。以新的 `children` 的类型作为基准点进行判断。类型的判断使用`shapeFlags`，
+
+```ts
+function patchChildren(n1, n2) {
+  const { shapeFlags: prevShapeFlags, children: c1 } = n1;
+  const { shapeFlags, children: c2 } = n2;
+  if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+    if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+      // 移除老的children
+
+      // 添加新的text
+    }
+  }
+}
+```
+
+以上代码中，当新的`children`为`text`时（`shapeFlags & ShapeFlags.TEXT_CHILDREN`），且老的`children`为 `array` 时（`prevShapeFlags & ShapeFlags.ARRAY_CHILDREN`），需要做两件事：先移除老的`children`，再添加新的`text`。
+
+#### 移除老的children
+
+老的`children`是数组类型，需要循环把每一个节点都删除。
+
+```ts
+function patchChildren(n1, n2) {
+  const { shapeFlags: prevShapeFlags, children: c1 } = n1;
+  const { shapeFlags, children: c2 } = n2;
+  if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+    if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+      // 移除老的children
+   		unMountChildren(c1);
+      // 添加新的text
+    }
+  }
+}
+
+function unMountChildren(children) {
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i].el;
+    hostRemove(el);
+  }
+}
+```
+
+移除`children`中每一项，需要使用的还是 DOM 环境的渲染接口，将这部分逻辑单独抽离放在 runtime-dom 中，`hostRemove`方法来自`createRenderer`函数的`options`参数里解构获取的。
+
+runtime-dom 下 index.ts 中，
+
+```ts
+function remove(child) {
+  const parent = child.parentNode;
+  if (parent) {
+    parent.removeChild(child);
+  }
+}
+```
+
+#### 添加新的text
+
+新的文本节点也是用到了 DOM 环境的渲染接口，将这部分逻辑单独封装到runtime-dom 中。设置`textContent`需要知道当前的`el`和待设置的`text`，因此需要引入`el`
+
+```ts
+function patchElement(n1, n2, container) {
+const oldProps = n1.props || EMPTY_OBJ;
+const newProps = n2.props || EMPTY_OBJ;
+const el = (n2.el = n1.el);
+patchChildren(n1, n2, el);
+patchProps(el, oldProps, newProps);
+}
+
+function patchChildren(n1, n2, container) {
+  const { shapeFlags: prevShapeFlags, children: c1 } = n1;
+  const { shapeFlags, children: c2 } = n2;
+  if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+    if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+      // 移除老的children
+   		unMountChildren(c1);
+      // 添加新的text
+      hostSetElementText(c2, container)
+    }
+  }
+}
+```
+
+`hostSetElementText`方法来自`createRenderer`函数的`options`参数里解构获取的。
+
+```ts
+export function createRenderer(options) {
+  const {
+    createElement: hostCreateElement,
+    patchProp: hostPatchProp,
+    insert: hostInsert,
+    remove: hostRemove,
+    setElementText: hostSetElementText,
+  } = options;
+  // code
+  ...
+}
+```
+具体实现还是在 runtime-dom 里，
+
+```ts
+function setElementText(text, el) {
+  el.textContent = text;
+}
+```
+
+#### 验证
+
+
+控制台中修改hasChange的值为true，
+
+![](./static/update-13.gif)
+
+### 老的 text  ->  新的 text
+
+测试项目中，修改App.js 代码如下：
+
+```js
+import { h } from "../../lib/zwd-mini-vue.esm.js";
+import { TextToText } from "./components/TextToText.js";
+export const App = {
+  name: "App",
+  setup() {
+    return {};
+  },
+  render() {
+    return h("div", {}, [
+      h("p", {}, "home"),
+      h(TextToText),
+    ]);
+  },
+};
+```
+
+TextToText.js 代码如下：
+
+```js
+import { h, ref } from "../../../lib/zwd-mini-vue.esm.js";
+
+const prevChildren = "oldChildren";
+const nextChildren = "newChildren";
+
+export const TextToText = {
+  setup() {
+    let hasChange = ref(false);
+    window.hasChange = hasChange;
+    return {
+      hasChange,
+    };
+  },
+  render() {
+    const self = this;
+    return self.hasChange
+      ? h("div", {}, nextChildren)
+      : h("div", {}, prevChildren);
+  },
+};
+```
+
+图解示意如下：
+
+![](./static/update-16.png)
+
+#### 实现
+
+老的 `children` 为 `text`，新的 `children` 为 `text`。只需要将`textContent`设置为新的即可。
+
+```ts
+if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+  if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+    unMountChildren(c1);
+    hostSetElementText(c2, container);
+  } else {
+    if (c1 !== c2) {
+      hostSetElementText(c2, container);
+    }
+  }
+}
+```
+
+#### 优化
+
+`hostSetElementText(c2, container)`逻辑重复，新老`children`都为`text`时，判断 `c1` 和 `c2` 不相等，其实在老的`children`为`array`时，`c1` 和 `c2` 也一定不相等。
+
+```ts
+ if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+  if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+    unMountChildren(c1);
+  }
+  if (c1 !== c2) {
+    hostSetElementText(c2, container);
+  }
+}
+```
+
+验证
+
+![](./static/update-14.gif)
+
+### 老的 text  ->  新的 Array
+
+测试项目中，修改App.js 代码如下：
+
+```js
+import { h } from "../../lib/zwd-mini-vue.esm.js";
+import { TextToArray } from "./components/TextToArray.js";
+export const App = {
+  name: "App",
+  setup() {
+    return {};
+  },
+  render() {
+    return h("div", {}, [
+      h("p", {}, "home"),
+      h(TextToArray),
+    ]);
+  },
+};
+```
+TextToArray.js 代码如下：
+
+```js
+import { h, ref } from "../../../lib/zwd-mini-vue.esm.js";
+
+const prevChildren = "oldChildren";
+const nextChildren = [h("p", {}, "A"), h("p", {}, "B")];
+
+export const TextToArray = {
+  setup() {
+    let hasChange = ref(false);
+    window.hasChange = hasChange;
+
+    return {
+      hasChange,
+    };
+  },
+  render() {
+    const self = this;
+    return self.hasChange
+      ? h("div", {}, nextChildren)
+      : h("div", {}, prevChildren);
+  },
+};
+```
+
+图解示意如下：
+
+![](./static/update-17.png)
+
+#### 实现
+
+老的 `children` 为 `text`，新的 `children` 为 `array`。只需要做两件事：先把原本的`textContent`置空，在挨个添加新节点。添加子节点方法`mountChildren`已实现，但为了保证代码一致性，和`unMountChildren`一致，可以将`mountChildren`的第一个传参修改成`children`，所有调用地方也做出相应修改。同时`mountChildren`方法最后一个参数还需要`parentComponent`，依次从上层函数中传参即可。
+
+```ts
+function patchChildren(n1, n2, container, parentComponent) {
+  const { shapeFlags: prevShapeFlags, children: c1 } = n1;
+  const { shapeFlags, children: c2 } = n2;
+
+  if (shapeFlags & ShapeFlags.TEXT_CHILDREN) {
+    if (prevShapeFlags & ShapeFlags.ARRAY_CHILDREN) {
+      unMountChildren(c1);
+    }
+    if (c1 !== c2) {
+      hostSetElementText(c2, container);
+    }
+  } else {
+    if (prevShapeFlags & ShapeFlags.TEXT_CHILDREN) {
+      hostSetElementText("", container);
+      mountChildren(c2, container, parentComponent);
+    }
+  }
+}
+```
+
+#### 验证
+
+![](./static/update-15.gif)
+
+### 老的 Array ->  新的 Array
+
 
 ## 总结
 

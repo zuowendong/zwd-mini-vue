@@ -5,7 +5,7 @@
  * 老的 Array ->  新的 Array
  */
 
-import { h, ref } from "../../lib/zwd-mini-vue.esm.js";
+import { h } from "../../lib/zwd-mini-vue.esm.js";
 
 import { ArrayToText } from "./components/ArrayToText.js";
 import { TextToText } from "./components/TextToText.js";

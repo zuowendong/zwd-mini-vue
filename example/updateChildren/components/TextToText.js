@@ -15,7 +15,6 @@ export const TextToText = {
   },
   render() {
     const self = this;
-    console.log(self.hasChange);
     return self.hasChange
       ? h("div", {}, nextChildren)
       : h("div", {}, prevChildren);
