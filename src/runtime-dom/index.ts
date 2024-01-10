@@ -22,10 +22,23 @@ function insert(el, container) {
   container.append(el);
 }
 
+function remove(child) {
+  const parent = child.parentNode;
+  if (parent) {
+    parent.removeChild(child);
+  }
+}
+
+function setElementText(text, el) {
+  el.textContent = text;
+}
+
 const renderer: any = createRenderer({
   createElement,
   patchProp,
   insert,
+  remove,
+  setElementText,
 });
 
 export function createApp(...args) {

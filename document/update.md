@@ -1,9 +1,5 @@
 # 元素element 更新
 
-> 本文是 Vue3 源码实战专栏第 22 篇，实现
-> 1. 更新 element流程搭建
-> 2. 更新 element的 props
-
 ## 更新element流程搭建
 
 新建测试项目 update，App.js 代码如下：
@@ -476,4 +472,4 @@ function patchProps(el, oldProps, newProps) {
 
 当调用`render`函数的时候，会触发函数内部用到的响应式数据，触发依赖收集，收集`effect`内部的匿名函数，在响应式数据修改时候触发所有依赖，也就是触发了匿名函数进行重新调用，也就是执行了`render`函数，返回全新的虚拟节点树。这就是新老两份虚拟节点树生成了。
 
-更新元素`props`，针对3个场景进行分类实现。`props`数据修改，循环老的虚拟节点树找到不一样的进行更新；`props`数据存在`undefined`或`null`，删除属性`removeAttribute` 
+更新元素`props`，针对3个场景进行分类实现。`props`数据修改，循环老的虚拟节点树找到和新的虚拟节点树中不一样的进行更新；`props`数据存在`undefined`或`null`，删除属性`removeAttribute`；设置新的`props`响应式数据，循环新的虚拟节点树查找不存在于老的虚拟节点树中的一项进行移除。
