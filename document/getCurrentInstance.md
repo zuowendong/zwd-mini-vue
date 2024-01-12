@@ -1,3 +1,7 @@
+# 高级API getCurrentInstance
+
+> [点击这里](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzIzNDY1MDY5Ng==&action=getalbum&album_id=3177388392377237504&scene=173&subscene=227&sessionid=1705040547&enterid=1705040549&from_msgid=2247486605&from_itemidx=1&count=3&nolastread=1#wechat_redirect)进入专栏
+
 在 Vue 3 中，`getCurrentInstance` 是一个全局 API，用于获取当前正在执行的组件实例。它返回一个组件实例对象，可以用于访问组件的属性、方法和生命周期钩子。
 
 `getCurrentInstance` 是一个高级 API，一般用于在某些特殊场景下需要直接访问组件实例的情况。在大多数情况下，应该优先使用 Vue 3 提供的 Composition API 来管理组件状态和行为。

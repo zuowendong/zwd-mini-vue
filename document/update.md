@@ -1,4 +1,6 @@
-# 元素element 更新
+# 建议收藏！Vue双端对比diff算法，一次说清楚
+
+> [点击这里](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzIzNDY1MDY5Ng==&action=getalbum&album_id=3177388392377237504&scene=173&subscene=227&sessionid=1705040547&enterid=1705040549&from_msgid=2247486605&from_itemidx=1&count=3&nolastread=1#wechat_redirect)进入专栏
 
 ## 更新element流程搭建
 

@@ -1,6 +1,8 @@
 # 高阶API，自定义渲染器customRenderer
 
 > 本文是 Vue3 源码实战专栏第 21 篇，实现自定义渲染器 custom renderer。
+> 
+> [点击这里](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzIzNDY1MDY5Ng==&action=getalbum&album_id=3177388392377237504&scene=173&subscene=227&sessionid=1705040547&enterid=1705040549&from_msgid=2247486605&from_itemidx=1&count=3&nolastread=1#wechat_redirect)进入专栏
 
 Vue3 中有一个高阶API，自定义渲染器。官方给出的定义是创建一个自定义渲染器。通过提供平台特定的节点创建以及更改 API，你可以在非 DOM 环境中也享受到 Vue 核心运行时的特性。
 

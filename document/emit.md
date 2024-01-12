@@ -1,4 +1,8 @@
+# 底层实现，组件emit功能
+
 > 本文是 Vue3 源码实战专栏第 17 篇，实现组件 emit 功能。
+> 
+> [点击这里](https://mp.weixin.qq.com/mp/appmsgalbum?__biz=MzIzNDY1MDY5Ng==&action=getalbum&album_id=3177388392377237504&scene=173&subscene=227&sessionid=1705040547&enterid=1705040549&from_msgid=2247486605&from_itemidx=1&count=3&nolastread=1#wechat_redirect)进入专栏
 
 你还在面试为了Vue源码而发愁吗？
 
