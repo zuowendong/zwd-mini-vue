@@ -884,6 +884,469 @@ function patchChildren(n1, n2, container, parentComponent) {
 
 ### 老的 Array ->  新的 Array
 
+老的 `children` 为 `array`，新的 `children` 为 `array`。这种情况比较复杂，针对前端 DOM 元素的特点，通常的操作有新增，删除和移动元素位置，时间复杂度为`O(n)`，采用双端比较 diff 算法，该算法是比较数组两端数据，旨在找到中间乱序的部分，最大程度上提升性能降低 `n`。
+
+diff 比较的场景有很多种：
+
+1. 左侧对比。老的(AB)C，新的(AB)DE
+2. 右侧对比。老的A(BC)，新的DE(BC)
+3. 新的比老的右边多。老的(AB)，新的(AB)C
+4. 新的比老的左边多。老的(AB)，新的C(AB)
+5. 老的比新的右边多。老的(AB)C，新的(AB)
+6. 老的比新的左边多。老的A(BC)，新的(BC)
+7. 中间乱序对比
+
+#### 左侧对比
+
+修改测试项目，App.js 代码如下：
+
+```js
+import { h } from "../../lib/zwd-mini-vue.esm.js";
+import { ArrayToArray } from "./components/ArrayToArray.js";
+
+export const App = {
+  name: "App",
+  setup() {
+    return {};
+  },
+  render() {
+    return h("div", {}, [
+      h("p", {}, "home"),
+      h(ArrayToArray),
+    ]);
+  },
+};
+```
+
+ArrayToArray.js 代码如下：
+
+```js
+import { h, ref } from "../../../lib/zwd-mini-vue.esm.js";
+
+/**
+ * 左侧比较
+ * (AB)C
+ * (AB)DE
+ */
+const prevChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+];
+const nextChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "D" }, "D"),
+  h("p", { key: "E" }, "E"),
+];
+
+export const ArrayToArray = {
+  setup() {
+    let hasChange = ref(false);
+    window.hasChange = hasChange;
+
+    return {
+      hasChange,
+    };
+  },
+  render() {
+    const self = this;
+    return self.hasChange
+      ? h("div", {}, nextChildren)
+      : h("div", {}, prevChildren);
+  },
+};
+```
+
+##### 分析
+
+使用 3 个指针：
+
+1. `i`指针指向 0
+2. `e1`指针指向老的虚拟节点树`c1`的尾部
+3. `e2`指针指向新的虚拟节点树`c2`的尾部
+
+图解示意如下：
+
+![](./static/update-23.png)
+
+从左侧开始对比，即移动 `i` 指针，保持 `e1` `e2` 不动。对比新老虚拟节点的`type`类型和`key`值，相同的话右移 `i`，当不一样的时候停止，即找到了新老虚拟节点不同的地方。
+
+![](./static/update-24.png)
+
+##### 实现
+
+```js
+function patchKeyedChildren(c1, c2, container,parentComponent) {
+  let i = 0;
+  let e1 = c1.length - 1;
+  let e2 = c2.length - 1;
+
+  function isSomeVnodeType(n1, n2) {
+    return n1.type === n2.type && n1.key === n2.key;
+  }
+
+  while (i <= e1 && i <= e2) {
+    const n1 = c1[i];
+    const n2 = c2[i];
+    if (isSomeVnodeType(n1, n2)) {
+      patch(n1, n2, container, parentComponent);
+    } else {
+      break;
+    }
+    i++;
+  }
+}
+```
+
+以上代码中，单独封装一个函数`patchKeyedChildren`处理老的 `children` 为 `array`，新的 `children` 为 `array` 的这种情况。因为是左侧比较移动`i`向右循环，那循环条件就是`i`指针同时小于等于`e1` `e2`，在新老虚拟节点相同时，它们可能还存在自己的子节点，所以再次调用`patch`递归的对比内部的子节点；如果节点不同的话，也就是`i`指针移到了下标为 2 的位置，此时`i`指向的节点是 C 和 D，直接跳出循环。
+
+#### 右侧对比
+
+修改 ArrayToArray.js 代码如下：
+
+```js
+/**
+ * 右侧比较
+ * A(BC)
+ * DE(BC)
+ */
+const prevChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+];
+const nextChildren = [
+  h("p", { key: "D" }, "D"),
+  h("p", { key: "E" }, "E"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+];
+```
+
+##### 分析
+
+右侧对比，是固定`i`指针不动，同时向左移动`e1` `e2`进行对比。
+
+图解示意如下：
+
+![](./static/update-25.png)
+
+`e1` `e2`指针减 1，即向左移动，当`e1`指向 A，`e2`指向 E，此时节点不同。
+
+![](./static/update-26.png)
+
+##### 实现
+
+```js
+while (e1 >= i && e2 >= i) {
+  const n1 = c1[e1];
+  const n2 = c2[e2];
+  if (isSomeVnodeType(n1, n2)) {
+    patch(n1, n2, container, parentComponent, parentAnchor);
+  } else {
+    break;
+  }
+  e1--;
+  e2--;
+}
+```
+
+以上代码中，循环条件是`i`同时小于等于`e1` `e2`，此时移动的是`e1` `e2`，那指向的虚拟节点就是`c1[e1]` `c2[e2]`。
+
+#### 新的比老的右边多
+
+修改 ArrayToArray.js 代码如下：
+
+```js
+/**
+ * 新的比老的右边多
+ * (AB)
+ * (AB)C
+ */
+const prevChildren = [h("p", { key: "A" }, "A"), h("p", { key: "B" }, "B")];
+const nextChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+  h("p", { key: "D" }, "D"),
+];
+```
+
+##### 分析
+
+图解示意如下：
+
+![](./static/update-27.png)
+
+先开始左侧对比，移动`i`指针向右，0 下标位置的 A 相同，1 下标位置的 B 相同，再次右移`i`指针，来到了下标为 2 的 位置，此时 `e1` 下标位置为 1，就不满足左侧对比的`while`循环条件。
+
+再进行右侧对比，也不满足`while`循环条件。但是此时已经可以定位出需要新增的 C，也就是下标位置为 2 的元素。
+
+![](./static/update-28.png)
+
+##### 实现
+
+```ts
+function patchKeyedChildren(
+  c1,
+  c2,
+  container,
+  parentComponent
+) {
+  let i = 0;
+  let e1 = c1.length - 1;
+  let e2 = c2.length - 1;
+
+  function isSomeVnodeType(n1, n2) {
+    return n1.type === n2.type && n1.key === n2.key;
+  }
+
+  while (i <= e1 && i <= e2) {
+    const n1 = c1[i];
+    const n2 = c2[i];
+    if (isSomeVnodeType(n1, n2)) {
+      patch(n1, n2, container, parentComponent);
+    } else {
+      break;
+    }
+    i++;
+  }
+
+  while (e1 >= i && e2 >= i) {
+    const n1 = c1[e1];
+    const n2 = c2[e2];
+    if (isSomeVnodeType(n1, n2)) {
+      patch(n1, n2, container, parentComponent);
+    } else {
+      break;
+    }
+    e1--;
+    e2--;
+  }
+
+  if (i > e1) {
+    if (i <= e2) {
+      while (i <= e2) {
+        patch(null, c2[i], container, parentComponent);
+        i++;
+      }
+    }
+  }
+}
+```
+
+以上代码中，定位出需要新增的 C 的位置范围，是此时`i`指针大于`e1`，同时小于等于`e2`的时候，调用`patch`方法进行创建（不存在`n1`参数的话会走`mountElement`函数逻辑）。如果需要新增的是 C D E F... 循环`patch`执行即可。
+
+##### 验证
+
+浏览器中，控制台输入 `hasChange` 修改为 `true`
+
+![](./static/update-19.gif)
+
+#### 新的比老的左边多
+
+修改 ArrayToArray.js 代码如下：
+
+```js
+/**
+ * 新的比老的左边多
+ * (AB)
+ * DC(AB)
+ */
+const prevChildren = [h("p", { key: "A" }, "A"), h("p", { key: "B" }, "B")];
+const nextChildren = [
+  h("p", { key: "D" }, "D"),
+  h("p", { key: "C" }, "C"),
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+];
+```
+
+##### 分析
+
+图解示意如下：
+
+![](./static/update-29.png)
+
+还是先左侧对比，A 和 C 不一样跳出循环，再进右侧对比循环，节点相同，左移动`e1` `e2`指针。当`e1`移动了 A 的左侧，也就是下标位置为 -1 的地方，`e2`指针移动了 C，下标位置为 0。此时i为 0，大于了 `e1`，跳出右侧对比的`while`循环条件。
+
+![](./static/update-30.png)
+
+##### 实现
+
+根据此时 3 个指针的位置，可以发现该种情况还是满足上一钟情况的判断条件，`i`指针大于`e1`，同时小于等于`e2`。
+
+直接验证，在浏览器中发现一个问题，需要新增的元素仍然是添加在尾部。这是因为在新增的时候，原本的`insert`方法用的是`append`，这个 API 就是向尾部添加元素。
+
+这里需要换一个 API 实现，`insertBefore`，该方法接收两个参数，第一个是需要添加的节点元素，第二个是可选的需要添加的位置的那个元素，也就是该元素的前一个位置添加新元素，如果第二个参数为`null`，还是添加到尾部。具体的可以看 [MDN](https://developer.mozilla.org/zh-CN/docs/Web/API/Node/insertBefore)
+
+那相应的`insert`函数就需要添加一个参数`anchor`指明需要添加位置的那个元素，
+
+```ts
+function insert(child, parent, anchor) {
+  parent.insertBefore(child, anchor || null);
+}
+insert添加了一个参数，导致 renderer.ts 中引用了hostInsert地方都需要添加anchor，这个参数最终来自patch方法透传，修改地方较多，可以挨个方法进行透传添加参数。其中，patchKeyedChildren方法中，
+function patchKeyedChildren(
+  c1,
+  c2,
+  container,
+  parentComponent,
+  parentAnchor
+) {
+  let i = 0;
+  let e1 = c1.length - 1;
+  let e2 = c2.length - 1;
+
+  function isSomeVnodeType(n1, n2) {
+    return n1.type === n2.type && n1.key === n2.key;
+  }
+
+  while (i <= e1 && i <= e2) {
+    const n1 = c1[i];
+    const n2 = c2[i];
+    if (isSomeVnodeType(n1, n2)) {
+      patch(n1, n2, container, parentComponent, parentAnchor);
+    } else {
+      break;
+    }
+    i++;
+  }
+
+  while (e1 >= i && e2 >= i) {
+    const n1 = c1[e1];
+    const n2 = c2[e2];
+    if (isSomeVnodeType(n1, n2)) {
+      patch(n1, n2, container, parentComponent, parentAnchor);
+    } else {
+      break;
+    }
+    e1--;
+    e2--;
+  }
+
+  if (i > e1) {
+    if (i <= e2) {
+      const nextPos = e2 + 1;
+      const anchor = nextPos < c2.length ? c2[nextPos].el : null;
+
+      while (i <= e2) {
+        patch(null, c2[i], container, parentComponent, anchor);
+        i++;
+      }
+    }
+  }
+}
+```
+
+以上代码中，以新的`children`为 DCAB 为例进行说明。此时的 3 个指针位置分别为
+
+* i：0
+* e1：-1
+* e2：1
+
+调用`patch`，实际上执行内部的`hostInsert`函数进行添加操作，`anchor`的位置确定在 `e2`指针的右侧，也就是`nextPos`，并且需要`nextPos`是在`c2`的内部，这样的确定的`anchor`保持不动，需要添加的元素 D C，挨个循环，先添加 D 到 A 的前面，再添加 C 到 A 的前面。
+
+![](./static/update-31.png)
+
+##### 验证
+
+![](./static/update-20.gif)
+
+#### 老的比新的右边多
+
+修改 ArrayToArray.js 代码如下：
+
+```js
+/**
+ * 老的比新的右边多
+ * (AB)C
+ * (AB)
+ */
+const prevChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+];
+const nextChildren = [h("p", { key: "A" }, "A"), h("p", { key: "B" }, "B")];
+```
+
+##### 分析
+
+图解示意如下：
+
+![](./static/update-32.png)
+
+仍然实现开始左侧对比，新老虚拟节点中 A B 都是相同的，`i`也相应的移动到了 2 的位置，此时 3 个指针的位置：
+
+* i：2
+* e1：2
+* e2：1
+
+`i`是小于等于`e1`，且大于`e2`
+
+![](./static/update-33.png)
+
+##### 实现
+
+```ts
+if (i > e1) {
+  if (i <= e2) {
+    const nextPos = e2 + 1;
+    const anchor = nextPos < c2.length ? c2[nextPos].el : null;
+    while (i <= e2) {
+      patch(null, c2[i], container, parentComponent, anchor);
+      i++;
+    }
+  }
+} else if (i > e2) {
+  while (i <= e1) {
+    hostRemove(c1[i].el);
+    i++;
+  }
+}
+```
+
+以上代码，确定老的比新的多的元素范围，也就是 `i` 小于等于 `e1` 时，删除这个范围中的所有元素。
+
+##### 验证
+
+![](./static/update-21.gif)
+
+#### 老的比新的左边多
+
+修改 ArrayToArray.js 代码如下：
+
+```js
+/**
+ * 老的比新的左边多
+ * A(BC)
+ * (BC)
+ */
+const prevChildren = [
+  h("p", { key: "A" }, "A"),
+  h("p", { key: "B" }, "B"),
+  h("p", { key: "C" }, "C"),
+];
+const nextChildren = [h("p", { key: "B" }, "B"), h("p", { key: "C" }, "C")];
+```
+
+##### 分析
+
+图解示意如下：
+
+![](./static/update-34.png)
+
+还是先左侧对比，A B 不同跳过循环，再进行右侧对比，B C 相同，此时 `e1` `e2` 再执行自减操作，变成了`e1：0` `e2：-1`跳出循环，`i`还保持不动是 0，仍然满足上面那种的判断条件，直接浏览器中验证。
+
+![](./static/update-35.png)
+
+##### 验证
+
+![](./static/update-22.gif)
+
+#### 中间乱序对比
 
 ## 总结
 
