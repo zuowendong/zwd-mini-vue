@@ -24,7 +24,11 @@
 <script setup>
 import Foo from "./Foo.vue";
 </script>
+```
+
 子组件代码：
+
+```js
 <template>
   <div>Foo</div>
   <div>

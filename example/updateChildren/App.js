@@ -28,10 +28,10 @@ export const App = {
       // h(TextToText),
 
       // 老的 text  ->  新的 Array
-      h(TextToArray),
+      // h(TextToArray),
 
       // 老的 Array ->  新的 Array
-      // h(ArrayToArray),
+      h(ArrayToArray),
     ]);
   },
 };
